@@ -1,0 +1,218 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Account | AI Research Assistant</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #0b0f19;
+            color: #f3f4f6;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 16px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 450px;
+            background: #151b2b;
+            border: 1px solid #293247;
+            border-radius: 18px;
+            padding: 32px;
+            box-shadow: 0 15px 45px rgba(0, 0, 0, 0.3);
+        }
+
+        .logo {
+            width: 52px;
+            height: 52px;
+            border-radius: 15px;
+            background: #6366f1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            margin: 0 auto 18px;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 26px;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #9ca3af;
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 25px;
+        }
+
+        .form-group {
+            margin-bottom: 17px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #e5e7eb;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px 13px;
+            border: 1px solid #374151;
+            border-radius: 9px;
+            background: #0f1422;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #818cf8;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+        }
+
+        .help {
+            display: block;
+            color: #9ca3af;
+            font-size: 12px;
+            line-height: 1.5;
+            margin-top: 6px;
+        }
+
+        .field-error,
+        .error {
+            color: #fca5a5;
+            font-size: 12px;
+            margin-top: 6px;
+            line-height: 1.5;
+        }
+
+        .error-box {
+            background: #3b1720;
+            border: 1px solid #7f1d1d;
+            border-radius: 8px;
+            padding: 11px;
+            margin-bottom: 16px;
+        }
+
+        .btn {
+            width: 100%;
+            border: none;
+            border-radius: 9px;
+            padding: 14px;
+            margin-top: 6px;
+            background: #6366f1;
+            color: white;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .btn:hover {
+            background: #4f46e5;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 22px;
+            color: #9ca3af;
+            font-size: 14px;
+        }
+
+        a {
+            color: #a5b4fc;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 25px 20px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="container">
+        <div class="logo">✦</div>
+
+        <h1>Create Account</h1>
+        <p class="subtitle">
+            Register to start using your AI Research Assistant.
+        </p>
+
+        {% if form.non_field_errors %}
+            <div class="error-box">
+                {% for error in form.non_field_errors %}
+                    <div class="error">{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="error-box">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+
+        <form method="POST" action="{% url 'chat:register' %}">
+            {% csrf_token %}
+
+            {% for field in form %}
+                <div class="form-group">
+                    <label for="{{ field.id_for_label }}">
+                        {{ field.label }}
+                    </label>
+
+                    {{ field }}
+
+                    {% if field.name == "username" %}
+                        <small class="help">
+                            Use English letters only, maximum 50 characters.
+                        </small>
+                    {% elif field.name == "password1" %}
+                        <small class="help">
+                            At least 8 characters; cannot be entirely numeric.
+                        </small>
+                    {% endif %}
+
+                    {% if field.errors %}
+                        {% for error in field.errors %}
+                            <div class="field-error">{{ error }}</div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            {% endfor %}
+
+            <button type="submit" class="btn">
+                Create Account
+            </button>
+        </form>
+
+        <p class="footer">
+            Already have an account?
+            <a href="{% url 'chat:login' %}">Sign in</a>
+        </p>
+    </main>
+</body>
+</html>

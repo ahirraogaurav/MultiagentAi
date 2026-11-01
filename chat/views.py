@@ -1,5 +1,7 @@
 
-
+from django.contrib.auth import authenticate, login
+from django.contrib.auth.models import User
+from django.shortcuts import render, redirect
 import json
 
 import logging
@@ -63,17 +65,26 @@ def register_view(request):
 
 
 def login_view(request):
-    """Authenticate a user using their username or email."""
     if request.user.is_authenticated:
         return redirect("chat:index")
 
     error = ""
+
     if request.method == "POST":
         identifier = request.POST.get("email", "").strip()
         password = request.POST.get("password", "")
-        user_obj = User.objects.filter(email__iexact=identifier).first()
+
+        user_obj = User.objects.filter(
+            email__iexact=identifier
+        ).first()
+
         username = user_obj.username if user_obj else identifier
-        user = authenticate(request, username=username, password=password)
+
+        user = authenticate(
+            request,
+            username=username,
+            password=password
+        )
 
         if user is not None:
             login(request, user)

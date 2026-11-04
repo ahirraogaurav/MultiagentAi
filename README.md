@@ -462,8 +462,6 @@ Research queries and reports are saved in your local database so you can view yo
 - Everyone who contributes ideas, code, and feedback
 
 ---
-
-<div align="center">
 ---
 ## 📄 License
 

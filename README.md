@@ -464,6 +464,11 @@ Research queries and reports are saved in your local database so you can view yo
 ---
 
 <div align="center">
+---
+## 📄 License
+
+This project is intended for educational and learning purposes. Add a suitable open-source license if you want others to reuse, modify, and distribute the code.
+---
 
 ### ⭐ If you find this project useful, please star the repository!
 

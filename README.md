@@ -453,13 +453,7 @@ Yes. Agents live in the `agents/` folder. Create a new one and plug it into the 
 **Is my data stored?**
 Research queries and reports are saved in your local database so you can view your history. Nothing is shared unless you deploy it publicly.
 
----
 
-## 📄 License
-
-This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
-
----
 
 ## 🙌 Acknowledgments
 

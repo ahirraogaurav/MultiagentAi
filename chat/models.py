@@ -38,8 +38,10 @@ class Message(models.Model):
 
     class Meta:
         ordering = ["id"]
-
-
+    class Message(models.Model):
+    # ... your existing fields ...
+        feedback = models.CharField(max_length=10, blank=True, default="")  # "like", "dislike" or ""
+    feedback = models.CharField(max_length=10, blank=True, default="")  # "like", "dislike" or ""
 class Profile(models.Model):
     """Single-row settings used by the Customize page."""
     display_name = models.CharField(max_length=80, blank=True)

@@ -64,4 +64,6 @@ urlpatterns = [
         views.chat_stream,
         name="chat_stream",
     ),
+    path("api/messages/<int:message_id>/feedback/", views.message_feedback, name="message_feedback"),
+    path("feedback/<int:message_id>/", views.message_feedback, name="message_feedback"),
 ]

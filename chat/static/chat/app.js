@@ -1,3 +1,56 @@
+/* ---------- Like / dislike bar under each answer ---------- */
+function getCookie(name) {
+  const m = document.cookie.match('(^|;)\\s*' + name + '=([^;]+)');
+  return m ? decodeURIComponent(m[2]) : '';
+}
+
+const ICON_LIKE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v11H3V10zM7 10l4-8a2 2 0 0 1 2 2v4h6a2 2 0 0 1 2 2.3l-1.4 8A2 2 0 0 1 17.6 20H7"/></svg>';
+const ICON_DISLIKE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V3h4v11zM17 14l-4 8a2 2 0 0 1-2-2v-4H5a2 2 0 0 1-2-2.3l1.4-8A2 2 0 0 1 6.4 4H17"/></svg>';
+
+function addFeedbackBar(answerEl, messageId, current = '') {
+  if (!answerEl || !messageId) return;
+  if (answerEl.querySelector('.fb-bar')) return; // never add twice
+
+  const bar = document.createElement('div');
+  bar.className = 'fb-bar';
+  bar.innerHTML = `
+    <div>Was this answer helpful?</div>
+    <div class="fb-row">
+      <button type="button" class="fb-btn" data-v="like" aria-label="Like" title="Like">${ICON_LIKE}</button>
+      <button type="button" class="fb-btn" data-v="dislike" aria-label="Dislike" title="Dislike">${ICON_DISLIKE}</button>
+      <span class="fb-thanks"></span>
+    </div>`;
+  answerEl.appendChild(bar);
+
+  const buttons = bar.querySelectorAll('.fb-btn');
+  const thanks = bar.querySelector('.fb-thanks');
+
+  function show(value) {
+    buttons.forEach((b) => b.classList.toggle('active', b.dataset.v === value));
+    thanks.textContent = value ? 'Thanks for your feedback!' : '';
+  }
+  show(current || '');
+
+  buttons.forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const value = btn.classList.contains('active') ? '' : btn.dataset.v;
+      try {
+        const res = await fetch(`/api/messages/${messageId}/feedback/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken'),
+          },
+          body: JSON.stringify({ feedback: value }),
+        });
+        if (res.ok) show(value);
+      } catch (e) {
+        console.error('Feedback failed', e);
+      }
+    });
+  });
+}
+
 (() => {
   const $ = (id) => document.getElementById(id);
   const onClick = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
@@ -91,7 +144,10 @@
   async function openConv(id) {
     const d = await getJSON(`/api/conversations/${id}/`);
     convId = id; currentProject = d.project; thread.innerHTML = ''; $('chat-title').textContent = d.title;
-    d.messages.forEach((m) => (m.role === 'user' ? addUser(m.content) : addBot(m.content, m.steps)));
+    d.messages.forEach((m) => {
+      if (m.role === 'user') addUser(m.content);
+      else { const b = addBot(m.content, m.steps); addFeedbackBar(b, m.id, m.feedback); }
+    });
     setHasMsgs(d.messages.length > 0); showChat(); updateChip(); app.classList.remove('open'); loadConvs(); toBottom();
   }
   function newChat(project = null) {
@@ -107,7 +163,7 @@
     setHasMsgs(true); addUser(text);
     const bot = addBot(); const body = bot.querySelector('.body'), stepsBox = bot.querySelector('.steps');
     body.classList.add('cursor'); toBottom();
-    let acc = '';
+    let acc = '', savedId = null;
     try {
       const res = await send_('/api/chat/', 'POST', { conversation_id: convId, message: text, agent: AGENT, project_id: currentProject && currentProject.id });
       const reader = res.body.getReader(), dec = new TextDecoder(); let buf = '';
@@ -122,11 +178,14 @@
           else if (ev.type === 'step') { const old = stepsBox.querySelector(`[data-agent="${ev.agent}"]`); const n = stepEl(ev); old ? old.replaceWith(n) : stepsBox.append(n); }
           else if (ev.type === 'delta') { acc += ev.text; body.innerHTML = render(acc); }
           else if (ev.type === 'error') { body.insertAdjacentHTML('beforeend', '<div class="err"></div>'); body.lastChild.textContent = ev.message; }
+          else if (ev.type === 'saved') { savedId = ev.message_id; }
           toBottom();
         }
       }
     } catch (e) { body.innerHTML = '<div class="err">Couldn\'t reach the server. Check that it is running.</div>'; }
-    body.classList.remove('cursor'); streaming = false; sendBtn.disabled = !input.value.trim(); loadConvs();
+    body.classList.remove('cursor');
+    if (savedId) { addFeedbackBar(bot, savedId); toBottom(); }
+    streaming = false; sendBtn.disabled = !input.value.trim(); loadConvs();
   }
   input.addEventListener('input', () => { autosize(); sendBtn.disabled = streaming || !input.value.trim(); });
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
@@ -287,7 +346,7 @@
   onClick('learn', () => alert('Learn more: coming soon'));
   onClick('logout', () => {
     document.getElementById('logoutForm')?.requestSubmit();
-});
+  });
 
   // ---------- start ----------
   getJSON('/api/profile/').then((p) => applyName(p.display_name)).catch(() => {});
@@ -298,114 +357,103 @@
 
 /* Voice input: speech-to-text */
 (() => {
-    const voiceBtn = document.getElementById("voice-btn");
-    const input = document.getElementById("input");
+  const voiceBtn = document.getElementById('voice-btn');
+  const input = document.getElementById('input');
 
-    if (!voiceBtn || !input) return;
+  if (!voiceBtn || !input) return;
 
-    const SpeechRecognition =
-        window.SpeechRecognition ||
-        window.webkitSpeechRecognition;
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-    if (!SpeechRecognition) {
-        voiceBtn.title =
-            "Voice input is not supported in this browser";
-        voiceBtn.addEventListener("click", () => {
-            alert(
-                "Voice input is not supported. Please use Google Chrome or Microsoft Edge."
-            );
-        });
-        return;
+  if (!SpeechRecognition) {
+    voiceBtn.title = 'Voice input is not supported in this browser';
+    voiceBtn.addEventListener('click', () => {
+      alert('Voice input is not supported. Please use Google Chrome or Microsoft Edge.');
+    });
+    return;
+  }
+
+  const recognition = new SpeechRecognition();
+  recognition.lang = 'en-IN';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+
+  let listening = false;
+  let finalTranscript = '';
+
+  recognition.onstart = () => {
+    listening = true;
+    finalTranscript = '';
+    voiceBtn.classList.add('recording');
+    voiceBtn.title = 'Listening... click to stop';
+  };
+
+  recognition.onresult = (event) => {
+    let interimTranscript = '';
+
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript;
+
+      if (event.results[i].isFinal) {
+        finalTranscript += transcript + ' ';
+      } else {
+        interimTranscript += transcript;
+      }
     }
 
-    const recognition = new SpeechRecognition();
-    recognition.lang = "en-IN";
-    recognition.continuous = false;
-    recognition.interimResults = true;
+    input.value = (finalTranscript + interimTranscript).trim();
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  };
 
-    let listening = false;
-    let finalTranscript = "";
+  recognition.onerror = (event) => {
+    console.error('Voice recognition error:', event.error);
 
-    recognition.onstart = () => {
-        listening = true;
-        finalTranscript = "";
-        voiceBtn.classList.add("recording");
-        voiceBtn.title = "Listening... click to stop";
-    };
+    if (event.error === 'not-allowed') {
+      alert('Please allow microphone access in your browser.');
+    } else if (event.error === 'no-speech') {
+      console.log('No speech detected. Please try again.');
+    }
+  };
 
-    recognition.onresult = (event) => {
-        let interimTranscript = "";
+  recognition.onend = () => {
+    listening = false;
+    voiceBtn.classList.remove('recording');
+    voiceBtn.title = 'Speak your message';
+  };
 
-        for (let i = event.resultIndex;
-             i < event.results.length; i++) {
-            const transcript =
-                event.results[i][0].transcript;
+  voiceBtn.addEventListener('click', () => {
+    if (listening) {
+      recognition.stop();
+      return;
+    }
 
-            if (event.results[i].isFinal) {
-                finalTranscript += transcript + " ";
-            } else {
-                interimTranscript += transcript;
-            }
-        }
-
-        input.value =
-            (finalTranscript + interimTranscript).trim();
-
-        input.dispatchEvent(
-            new Event("input", { bubbles: true })
-        );
-    };
-
-    recognition.onerror = (event) => {
-        console.error("Voice recognition error:", event.error);
-
-        if (event.error === "not-allowed") {
-            alert("Please allow microphone access in your browser.");
-        } else if (event.error === "no-speech") {
-            console.log("No speech detected. Please try again.");
-        }
-    };
-
-    recognition.onend = () => {
-        listening = false;
-        voiceBtn.classList.remove("recording");
-        voiceBtn.title = "Speak your message";
-    };
-
-    voiceBtn.addEventListener("click", () => {
-        if (listening) {
-            recognition.stop();
-            return;
-        }
-
-        try {
-            recognition.start();
-        } catch (error) {
-            console.error("Could not start voice input:", error);
-        }
-    });
+    try {
+      recognition.start();
+    } catch (error) {
+      console.error('Could not start voice input:', error);
+    }
+  });
 })();
 
 /* Text-to-speech: read an answer aloud */
 function speakAIResponse(text) {
-    if (!("speechSynthesis" in window)) {
-        alert("Text-to-speech is not supported in this browser.");
-        return;
-    }
+  if (!('speechSynthesis' in window)) {
+    alert('Text-to-speech is not supported in this browser.');
+    return;
+  }
 
-    window.speechSynthesis.cancel();
+  window.speechSynthesis.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "en-IN";
-    utterance.rate = 1;
-    utterance.pitch = 1;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'en-IN';
+  utterance.rate = 1;
+  utterance.pitch = 1;
 
-    window.speechSynthesis.speak(utterance);
+  window.speechSynthesis.speak(utterance);
 }
 
 /* Optional: stop speaking when needed */
 function stopAIResponse() {
-    if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-    }
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+  }
 }

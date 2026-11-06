@@ -343,3 +343,51 @@ body {
         box-shadow: 0 0 0 7px rgba(220, 38, 38, 0);
     }
 }
+/* Message under each answer + like/dislike buttons */
+.fb-bar {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(128, 128, 128, 0.25);
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.fb-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.fb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  color: inherit;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.fb-btn:hover {
+  background: rgba(128, 128, 128, 0.15);
+}
+
+.fb-btn.active {
+  background: rgba(74, 144, 226, 0.18);
+  border-color: #4a90e2;
+}
+
+.fb-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.fb-thanks {
+  font-size: 12px;
+  opacity: 0.7;
+}

@@ -1,49 +1,37 @@
-
 import os
 from pathlib import Path
 
+import dj_database_url
 from dotenv import load_dotenv
 
-
-# ============================================================
-# BASE DIRECTORY AND ENVIRONMENT VARIABLES
-# ============================================================
-
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 load_dotenv(BASE_DIR / ".env")
 
 
 # ============================================================
-# GROQ AND TAVILY CONFIGURATION
+# GROQ AND TAVILY
 # ============================================================
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
-
-GROQ_MODEL = os.getenv(
-    "GROQ_MODEL",
-    "openai/gpt-oss-120b",
-).strip()
-
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b").strip()
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "").strip()
 
 
 # ============================================================
-# DJANGO SECURITY SETTINGS
+# SECURITY
 # ============================================================
-
-SECRET_KEY = os.getenv(
-    "DJANGO_SECRET_KEY",
-    "dev-only-secret-change-before-deployment",
-)
 
 DEBUG = os.getenv("DJANGO_DEBUG", "1").strip() == "1"
 
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "")
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = "dev-only-secret-change-before-deployment"
+    else:
+        raise RuntimeError("DJANGO_SECRET_KEY must be set when DJANGO_DEBUG=0")
+
 if DEBUG:
-    ALLOWED_HOSTS = [
-        "localhost",
-        "127.0.0.1",
-    ]
+    ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 else:
     ALLOWED_HOSTS = [
         host.strip()
@@ -51,9 +39,21 @@ else:
         if host.strip()
     ]
 
+CSRF_TRUSTED_ORIGINS = [
+    f"https://{host}"
+    for host in ALLOWED_HOSTS
+    if host not in ("localhost", "127.0.0.1")
+]
+
+# Render terminates HTTPS at its proxy
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
 
 # ============================================================
-# INSTALLED APPLICATIONS
+# APPS AND MIDDLEWARE
 # ============================================================
 
 INSTALLED_APPS = [
@@ -63,20 +63,12 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-
-    # Project application
     "chat",
 ]
-
-
-# ============================================================
-# MIDDLEWARE
-# ============================================================
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
-    "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -85,12 +77,8 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-
-# ============================================================
-# URL CONFIGURATION
-# ============================================================
-
 ROOT_URLCONF = "config.urls"
+WSGI_APPLICATION = "config.wsgi.application"
 
 
 # ============================================================
@@ -100,9 +88,7 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [
-            BASE_DIR / "templates",
-        ],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -116,21 +102,16 @@ TEMPLATES = [
 
 
 # ============================================================
-# WSGI CONFIGURATION
-# ============================================================
-
-WSGI_APPLICATION = "config.wsgi.application"
-
-
-# ============================================================
-# DATABASE CONFIGURATION
+# DATABASE (Supabase PostgreSQL)
 # ============================================================
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+    "default": dj_database_url.config(
+        env="DATABASE_URL",
+        conn_max_age=600,
+        conn_health_checks=True,
+        ssl_require=True,
+    )
 }
 
 
@@ -139,30 +120,10 @@ DATABASES = {
 # ============================================================
 
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        "NAME": (
-            "django.contrib.auth.password_validation."
-            "UserAttributeSimilarityValidator"
-        ),
-    },
-    {
-        "NAME": (
-            "django.contrib.auth.password_validation."
-            "MinimumLengthValidator"
-        ),
-    },
-    {
-        "NAME": (
-            "django.contrib.auth.password_validation."
-            "CommonPasswordValidator"
-        ),
-    },
-    {
-        "NAME": (
-            "django.contrib.auth.password_validation."
-            "NumericPasswordValidator"
-        ),
-    },
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
 
@@ -171,11 +132,8 @@ AUTH_PASSWORD_VALIDATORS = [
 # ============================================================
 
 LANGUAGE_CODE = "en-us"
-
 TIME_ZONE = "Asia/Kolkata"
-
 USE_I18N = True
-
 USE_TZ = True
 
 
@@ -183,43 +141,31 @@ USE_TZ = True
 # STATIC FILES
 # ============================================================
 
-STATIC_URL = "static/"
-
+STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-# Optional project-level static directory
-STATICFILES_DIRS = [
-    BASE_DIR / "static",
-]
+_static_dir = BASE_DIR / "static"
+STATICFILES_DIRS = [_static_dir] if _static_dir.exists() else []
+
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+}
 
 
 # ============================================================
-# DEFAULT PRIMARY KEY
+# AUTH REDIRECTS, DEFAULT KEY, LOGGING
 # ============================================================
+
+LOGIN_URL = "chat:login"
+LOGIN_REDIRECT_URL = "chat:index"
+LOGOUT_REDIRECT_URL = "chat:login"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
-
-# ============================================================
-# LOGGING
-# ============================================================
 
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-        },
-    },
-    "root": {
-        "handlers": ["console"],
-        "level": "INFO",
-    },
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "root": {"handlers": ["console"], "level": "INFO"},
 }
-LOGIN_URL = "chat:login"
-LOGIN_REDIRECT_URL = "chat:index"
-LOGOUT_REDIRECT_URL = "chat:login"
-STATIC_URL = "/static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_DIRS = [BASE_DIR / "static"]

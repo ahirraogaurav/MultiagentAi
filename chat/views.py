@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from functools import wraps
 
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
@@ -17,6 +18,16 @@ from .models import Conversation, Message, Profile, Project
 logger = logging.getLogger(__name__)
 
 ARTIFACT_RE = re.compile(r"```([\w+#.-]*)\s*\n(.*?)```", re.DOTALL)
+
+
+def api_login_required(view):
+    """Like @login_required, but answers API calls with JSON 401 instead of a redirect."""
+    @wraps(view)
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Authentication required"}, status=401)
+        return view(request, *args, **kwargs)
+    return wrapper
 
 
 def _body(request):
@@ -101,9 +112,10 @@ def index(request):
 # ============================================================
 
 @require_http_methods(["GET"])
+@api_login_required
 def conversations(request):
     """Return recent conversations."""
-    items = Conversation.objects.all().order_by("-id")[:200]
+    items = Conversation.objects.filter(user=request.user).order_by("-id")[:200]
     return JsonResponse({
         "conversations": [
             {"id": conv.id, "title": conv.title}
@@ -113,11 +125,12 @@ def conversations(request):
 
 
 @require_http_methods(["GET", "DELETE", "PATCH"])
+@api_login_required
 def conversation_detail(request, pk):
     """Load, rename, or delete a conversation."""
     conv = (
         Conversation.objects
-        .filter(pk=pk)
+        .filter(pk=pk, user=request.user)
         .select_related("project")
         .first()
     )
@@ -178,12 +191,13 @@ def _snippet(text, query):
 
 
 @require_http_methods(["GET"])
+@api_login_required
 def search(request):
     """Search conversation titles and message contents."""
     query = (request.GET.get("q") or "").strip()
 
     if not query:
-        items = Conversation.objects.all().order_by("-id")[:20]
+        items = Conversation.objects.filter(user=request.user).order_by("-id")[:20]
         return JsonResponse({
             "results": [
                 {"id": conv.id, "title": conv.title, "snippet": ""}
@@ -193,6 +207,7 @@ def search(request):
 
     found = (
         Conversation.objects
+        .filter(user=request.user)
         .filter(Q(title__icontains=query) | Q(messages__content__icontains=query))
         .distinct()
         .order_by("-id")[:50]
@@ -230,6 +245,7 @@ def _project(project):
 
 
 @require_http_methods(["GET", "POST"])
+@api_login_required
 def projects(request):
     """List projects or create a project."""
     if request.method == "POST":
@@ -240,20 +256,22 @@ def projects(request):
             return JsonResponse({"error": "Name is required"}, status=400)
 
         project = Project.objects.create(
+            user=request.user,
             name=name[:120],
             description=(data.get("description") or "")[:300],
             instructions=data.get("instructions") or "",
         )
         return JsonResponse(_project(project), status=201)
 
-    items = Project.objects.all().order_by("id")
+    items = Project.objects.filter(user=request.user).order_by("id")
     return JsonResponse({"projects": [_project(project) for project in items]})
 
 
 @require_http_methods(["GET", "PATCH", "DELETE"])
+@api_login_required
 def project_detail(request, pk):
     """View, update, or delete a project."""
-    project = Project.objects.filter(pk=pk).first()
+    project = Project.objects.filter(pk=pk, user=request.user).first()
 
     if project is None:
         return JsonResponse({"error": "Not found"}, status=404)
@@ -291,13 +309,14 @@ def project_detail(request, pk):
 # ============================================================
 
 @require_http_methods(["GET"])
+@api_login_required
 def artifacts(request):
     """Find code blocks in saved assistant responses."""
     output = []
 
     messages = (
         Message.objects
-        .filter(role="assistant", content__contains="```")
+        .filter(role="assistant", content__contains="```", conversation__user=request.user)
         .select_related("conversation")
         .order_by("-id")[:300]
     )
@@ -346,9 +365,10 @@ def _profile(profile_obj):
 
 
 @require_http_methods(["GET", "PATCH"])
+@api_login_required
 def profile(request):
     """Read or update chat preferences."""
-    profile_obj = Profile.load()
+    profile_obj = Profile.for_user(request.user)
 
     if request.method == "PATCH":
         data = _body(request)
@@ -413,6 +433,7 @@ def _sse(data):
 # ============================================================
 
 @require_POST
+@api_login_required
 def chat_stream(request):
     """
     Receive a message, call the agent backend, stream events,
@@ -441,7 +462,7 @@ def chat_stream(request):
         try:
             conv = (
                 Conversation.objects
-                .filter(pk=conversation_id)
+                .filter(pk=conversation_id, user=request.user)
                 .select_related("project")
                 .first()
             )
@@ -455,11 +476,12 @@ def chat_stream(request):
 
         if project_id:
             try:
-                project = Project.objects.filter(pk=project_id).first()
+                project = Project.objects.filter(pk=project_id, user=request.user).first()
             except (ValueError, TypeError):
                 project = None
 
         conv = Conversation.objects.create(
+            user=request.user,
             title=user_text[:60],
             project=project,
         )
@@ -473,7 +495,7 @@ def chat_stream(request):
         for message in conv.messages.all().order_by("id")
     ]
 
-    profile_obj = Profile.load()
+    profile_obj = Profile.for_user(request.user)
     extra = _extra(profile_obj, conv.project)
 
     disabled_agents = profile_obj.disabled_agents or []
@@ -552,15 +574,19 @@ def chat_stream(request):
 # MESSAGE FEEDBACK (like / dislike)
 # ============================================================
 
-@login_required
 @require_POST
+@api_login_required
 def message_feedback(request, message_id):
     value = _body(request).get("feedback", "")
     if value not in ("like", "dislike", ""):
         return JsonResponse({"error": "invalid value"}, status=400)
 
-    msg = get_object_or_404(Message, id=message_id, role="assistant")
-    # NOTE: Conversation has no user field yet, so ownership can't be checked.
+    msg = get_object_or_404(
+        Message,
+        id=message_id,
+        role="assistant",
+        conversation__user=request.user,  # users can only rate their own chats
+    )
     msg.feedback = value
     msg.save(update_fields=["feedback"])
     return JsonResponse({"ok": True, "feedback": msg.feedback})

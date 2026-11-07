@@ -169,3 +169,12 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "root": {"handlers": ["console"], "level": "INFO"},
 }
+# ============================================================
+# SESSIONS
+# ============================================================
+
+# Log out when the browser is closed
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
+# Also expire sessions after 1 day (in seconds)
+SESSION_COOKIE_AGE = 60 * 60 * 24
